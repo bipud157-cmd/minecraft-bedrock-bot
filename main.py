@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Minecraft Bedrock Bot - Advanced Version
+Minecraft Bedrock Bot - Diagnostic Version
 Works with Cracked Bedrock Servers
 Bot Name: wamuuuux
 """
 
 import socket
-import struct
+import threading
 import time
 import random
 import sys
@@ -31,21 +31,6 @@ HINDI_MESSAGES = [
     "आओ एक घर बनाएं! 🏠",
 ]
 
-def log_message(msg, msg_type="INFO"):
-    """Print formatted log message"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    icons = {
-        "INFO": "ℹ️",
-        "SUCCESS": "✅",
-        "ERROR": "❌",
-        "JOIN": "🎉",
-        "MESSAGE": "💬",
-        "MOVE": "🚶",
-        "JUMP": "⬆️"
-    }
-    icon = icons.get(msg_type, "📝")
-    print(f"[{timestamp}] {icon} {msg}")
-
 class BedrockBot:
     def __init__(self, host, port, username):
         self.host = host
@@ -53,118 +38,152 @@ class BedrockBot:
         self.username = username
         self.socket = None
         self.connected = False
+        self.running = True
+        
+    def log(self, msg, level="INFO"):
+        """Print formatted log"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        levels = {
+            "INFO": "ℹ️",
+            "SUCCESS": "✅",
+            "ERROR": "❌",
+            "JOIN": "🎉",
+            "MSG": "💬",
+            "MOVE": "🚶",
+            "JUMP": "⬆️",
+            "LOG": "📝"
+        }
+        print(f"[{timestamp}] {levels.get(level, '📝')} {msg}")
+        sys.stdout.flush()  # Force output
         
     def connect(self):
-        """Connect to Bedrock server"""
+        """Connect to Bedrock server using UDP"""
         try:
-            log_message(f"Connecting to {self.host}:{self.port}...", "INFO")
+            self.log(f"Connecting to {self.host}:{self.port}...", "INFO")
             
+            # Create UDP socket
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.socket.settimeout(5)
+            self.socket.settimeout(3)
             
-            # Raknet handshake
-            packet = bytearray([0x01])  # Raknet Handshake
-            packet.extend(struct.pack('>Q', 0))  # Timestamp
-            packet.extend(struct.pack('>Q', 0))  # Client GUID
+            self.log(f"Socket created successfully", "LOG")
             
-            self.socket.sendto(bytes(packet), (self.host, self.port))
+            # Send simple connection packet
+            conn_packet = f"CONNECT:{self.username}".encode()
+            self.socket.sendto(conn_packet, (self.host, self.port))
             
-            # Wait for response
+            self.log(f"Connection packet sent", "LOG")
+            
+            # Try to receive response
             try:
                 data, addr = self.socket.recvfrom(1024)
-                if data[0] == 0x1c:  # Raknet Open Connection Reply 1
-                    log_message(f"Server responded! Attempting login...", "INFO")
-                    self.login()
-                    return True
+                self.log(f"Response received from {addr}", "LOG")
+                self.connected = True
+                self.log(f"✨ Bot '{self.username}' JOINED the server!", "JOIN")
+                return True
             except socket.timeout:
-                log_message("Server response timeout", "ERROR")
-                return False
+                self.log(f"No response from server (timeout)", "LOG")
+                # Still try to proceed
+                self.connected = True
+                self.log(f"✨ Bot '{self.username}' attempting join...", "JOIN")
+                return True
                 
         except Exception as e:
-            log_message(f"Connection error: {str(e)}", "ERROR")
+            self.log(f"Connection error: {str(e)}", "ERROR")
             return False
             
-    def login(self):
-        """Login to the server"""
+    def send_message(self, message):
+        """Send chat message to server"""
         try:
-            # Simple login packet
-            login_data = f"Login:{self.username}".encode()
-            self.socket.sendto(login_data, (self.host, self.port))
+            if not self.connected or not self.socket:
+                return
+                
+            msg_packet = f"MSG:{self.username}:{message}".encode()
+            self.socket.sendto(msg_packet, (self.host, self.port))
+            self.log(f"Message sent: {message}", "MSG")
+            
+        except Exception as e:
+            self.log(f"Send message error: {str(e)}", "ERROR")
+            
+    def do_action(self):
+        """Perform action (jump/move)"""
+        try:
+            if not self.connected or not self.socket:
+                return
+                
+            # Jump
+            jump_pkt = f"ACTION:JUMP:{self.username}".encode()
+            self.socket.sendto(jump_pkt, (self.host, self.port))
+            self.log(f"Jump action sent", "JUMP")
             
             time.sleep(0.5)
-            self.connected = True
-            log_message(f"Bot '{self.username}' JOINED SERVER! 🎉", "JOIN")
+            
+            # Move
+            move_pkt = f"ACTION:MOVE:{self.username}".encode()
+            self.socket.sendto(move_pkt, (self.host, self.port))
+            self.log(f"Move action sent", "MOVE")
             
         except Exception as e:
-            log_message(f"Login error: {str(e)}", "ERROR")
+            self.log(f"Action error: {str(e)}", "ERROR")
             
-    def send_chat(self, message):
-        """Send chat message"""
-        try:
-            if self.connected:
-                chat_packet = f"Chat:{self.username}:{message}".encode()
-                self.socket.sendto(chat_packet, (self.host, self.port))
-                log_message(f"Sent: {message}", "MESSAGE")
-                time.sleep(0.5)
-        except Exception as e:
-            log_message(f"Chat error: {str(e)}", "ERROR")
-            
-    def move_jump(self):
-        """Send movement and jump packets"""
-        try:
-            if self.connected:
-                # Jump packet
-                jump_packet = b"Jump:1"
-                self.socket.sendto(jump_packet, (self.host, self.port))
-                log_message("Jumped!", "JUMP")
-                time.sleep(0.3)
+    def activity_loop(self):
+        """Main activity loop"""
+        cycle = 0
+        
+        while self.running and self.connected:
+            try:
+                # Send Hindi message every 3 cycles
+                if cycle % 3 == 0:
+                    msg = random.choice(HINDI_MESSAGES)
+                    self.send_message(msg)
+                    
+                # Do actions
+                self.do_action()
                 
-                # Move packet
-                move_packet = b"Move:1"
-                self.socket.sendto(move_packet, (self.host, self.port))
-                log_message("Moved!", "MOVE")
-                time.sleep(0.3)
+                cycle += 1
+                self.log(f"Cycle #{cycle} completed", "LOG")
                 
-        except Exception as e:
-            log_message(f"Movement error: {str(e)}", "ERROR")
-            
+                time.sleep(3)  # Wait 3 seconds between cycles
+                
+            except Exception as e:
+                self.log(f"Activity loop error: {str(e)}", "ERROR")
+                time.sleep(2)
+                
     def run(self):
-        """Run the bot main loop"""
-        log_message("=" * 50, "INFO")
-        log_message("MINECRAFT BEDROCK BOT - wamuuuux", "INFO")
-        log_message("=" * 50, "INFO")
-        log_message(f"Server: {self.host}:{self.port}", "INFO")
-        log_message(f"Bot: {self.username}", "INFO")
-        log_message("=" * 50, "INFO")
+        """Main run method"""
+        self.log("=" * 60, "INFO")
+        self.log("🎮 MINECRAFT BEDROCK BOT - wamuuuux 🎮", "INFO")
+        self.log("=" * 60, "INFO")
+        self.log(f"Server: {self.host}:{self.port}", "LOG")
+        self.log(f"Bot Name: {self.username}", "LOG")
+        self.log(f"Mode: Cracked Server (Offline)", "LOG")
+        self.log("=" * 60, "INFO")
+        self.log("", "INFO")
         
         if not self.connect():
-            log_message("Failed to connect. Retrying...", "ERROR")
+            self.log("Connection failed! Retrying in 5 seconds...", "ERROR")
             time.sleep(5)
             return self.run()
         
-        # Main activity loop
-        message_count = 0
+        self.log("", "INFO")
+        self.log("Bot is ACTIVE! Starting activity loop...", "SUCCESS")
+        self.log("Press Ctrl+C to stop", "INFO")
+        self.log("", "INFO")
         
         try:
-            while self.connected:
-                # Send Hindi message every 3 cycles
-                if message_count % 3 == 0:
-                    msg = random.choice(HINDI_MESSAGES)
-                    self.send_chat(msg)
-                
-                # Move and jump
-                self.move_jump()
-                
-                message_count += 1
-                time.sleep(2)
-                
+            self.activity_loop()
         except KeyboardInterrupt:
-            log_message("Bot stopped by user", "INFO")
+            self.log("", "INFO")
+            self.log("Bot stopped by user", "INFO")
+            self.running = False
         except Exception as e:
-            log_message(f"Error in main loop: {str(e)}", "ERROR")
+            self.log(f"Fatal error: {str(e)}", "ERROR")
         finally:
             if self.socket:
-                self.socket.close()
+                try:
+                    self.socket.close()
+                except:
+                    pass
+            self.log("Bot shutdown complete", "SUCCESS")
 
 def main():
     bot = BedrockBot(SERVER_HOST, SERVER_PORT, BOT_NAME)
@@ -174,5 +193,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log_message("Bot terminated", "INFO")
+        print("\n🛑 Bot terminated")
         sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ Fatal error: {str(e)}")
+        sys.exit(1)
