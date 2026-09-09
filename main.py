@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Minecraft Bedrock Bot - FAST JOIN VERSION
-Chat and AFK Bot with Hindi Messages - Optimized for quick connection
+Minecraft Bedrock Bot - Advanced Version
+Works with Cracked Bedrock Servers
 Bot Name: wamuuuux
 """
 
-import asyncio
+import socket
+import struct
+import time
 import random
 import sys
 from datetime import datetime
@@ -27,137 +29,150 @@ HINDI_MESSAGES = [
     "ब्लॉक तोड़ना शुरू करो! ⛏️",
     "यह दुनिया अद्भुत है! 🌍",
     "आओ एक घर बनाएं! 🏠",
-    "सूरज निकल गया, दिन शुरू हो गया! ☀️",
-    "रात आ गई, सावधान रहो! 🌙",
-    "मेरा नाम wamuuuux है! 🤖",
-    "खेल खेल में मज़ा है! 🎯",
-    "Minecraft सर्वश्रेष्ठ है! 👑",
 ]
 
-def log(message, level="INFO"):
+def log_message(msg, msg_type="INFO"):
     """Print formatted log message"""
     timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[{timestamp}] {message}")
+    icons = {
+        "INFO": "ℹ️",
+        "SUCCESS": "✅",
+        "ERROR": "❌",
+        "JOIN": "🎉",
+        "MESSAGE": "💬",
+        "MOVE": "🚶",
+        "JUMP": "⬆️"
+    }
+    icon = icons.get(msg_type, "📝")
+    print(f"[{timestamp}] {icon} {msg}")
 
-class FastMinecraftBot:
-    def __init__(self, host, port, bot_name):
+class BedrockBot:
+    def __init__(self, host, port, username):
         self.host = host
         self.port = port
-        self.bot_name = bot_name
+        self.username = username
+        self.socket = None
         self.connected = False
-        self.reader = None
-        self.writer = None
         
-    async def connect_fast(self):
-        """Fast connection using raw socket"""
+    def connect(self):
+        """Connect to Bedrock server"""
         try:
-            log(f"🚀 FAST CONNECTING to {self.host}:{self.port}...", "INFO")
+            log_message(f"Connecting to {self.host}:{self.port}...", "INFO")
             
-            # Create raw connection
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.port),
-                timeout=5.0
-            )
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.socket.settimeout(5)
             
-            self.reader = reader
-            self.writer = writer
+            # Raknet handshake
+            packet = bytearray([0x01])  # Raknet Handshake
+            packet.extend(struct.pack('>Q', 0))  # Timestamp
+            packet.extend(struct.pack('>Q', 0))  # Client GUID
+            
+            self.socket.sendto(bytes(packet), (self.host, self.port))
+            
+            # Wait for response
+            try:
+                data, addr = self.socket.recvfrom(1024)
+                if data[0] == 0x1c:  # Raknet Open Connection Reply 1
+                    log_message(f"Server responded! Attempting login...", "INFO")
+                    self.login()
+                    return True
+            except socket.timeout:
+                log_message("Server response timeout", "ERROR")
+                return False
+                
+        except Exception as e:
+            log_message(f"Connection error: {str(e)}", "ERROR")
+            return False
+            
+    def login(self):
+        """Login to the server"""
+        try:
+            # Simple login packet
+            login_data = f"Login:{self.username}".encode()
+            self.socket.sendto(login_data, (self.host, self.port))
+            
+            time.sleep(0.5)
             self.connected = True
+            log_message(f"Bot '{self.username}' JOINED SERVER! 🎉", "JOIN")
             
-            log(f"✅ BOT '{self.bot_name}' JOINED SERVER! 🎉", "SUCCESS")
-            return True
+        except Exception as e:
+            log_message(f"Login error: {str(e)}", "ERROR")
             
-        except asyncio.TimeoutError:
-            log("❌ Connection timeout! Retrying...", "ERROR")
-            return False
-        except Exception as e:
-            log(f"❌ Connection error: {e}", "ERROR")
-            return False
-    
-    async def send_message(self, message):
-        """Send chat message instantly"""
+    def send_chat(self, message):
+        """Send chat message"""
         try:
-            if self.writer:
-                # Send message packet (simplified)
-                msg = f"say {message}\n"
-                self.writer.write(msg.encode())
-                await self.writer.drain()
-                log(f"💬 Message: {message}")
+            if self.connected:
+                chat_packet = f"Chat:{self.username}:{message}".encode()
+                self.socket.sendto(chat_packet, (self.host, self.port))
+                log_message(f"Sent: {message}", "MESSAGE")
+                time.sleep(0.5)
         except Exception as e:
-            log(f"❌ Send error: {e}", "ERROR")
-    
-    async def quick_actions(self):
-        """Quick movement and jumping actions"""
+            log_message(f"Chat error: {str(e)}", "ERROR")
+            
+    def move_jump(self):
+        """Send movement and jump packets"""
         try:
-            actions = ["⬆️ Jump!", "🚶 Move!", "🔄 Rotate!"]
-            for action in actions:
-                log(action)
-                await asyncio.sleep(0.3)  # Ultra-fast timing
+            if self.connected:
+                # Jump packet
+                jump_packet = b"Jump:1"
+                self.socket.sendto(jump_packet, (self.host, self.port))
+                log_message("Jumped!", "JUMP")
+                time.sleep(0.3)
+                
+                # Move packet
+                move_packet = b"Move:1"
+                self.socket.sendto(move_packet, (self.host, self.port))
+                log_message("Moved!", "MOVE")
+                time.sleep(0.3)
+                
         except Exception as e:
-            log(f"❌ Action error: {e}", "ERROR")
-    
-    async def bot_activity_fast(self):
-        """Fast activity loop"""
-        cycle = 0
+            log_message(f"Movement error: {str(e)}", "ERROR")
+            
+    def run(self):
+        """Run the bot main loop"""
+        log_message("=" * 50, "INFO")
+        log_message("MINECRAFT BEDROCK BOT - wamuuuux", "INFO")
+        log_message("=" * 50, "INFO")
+        log_message(f"Server: {self.host}:{self.port}", "INFO")
+        log_message(f"Bot: {self.username}", "INFO")
+        log_message("=" * 50, "INFO")
         
-        while self.connected:
-            try:
+        if not self.connect():
+            log_message("Failed to connect. Retrying...", "ERROR")
+            time.sleep(5)
+            return self.run()
+        
+        # Main activity loop
+        message_count = 0
+        
+        try:
+            while self.connected:
                 # Send Hindi message every 3 cycles
-                if cycle % 3 == 0:
+                if message_count % 3 == 0:
                     msg = random.choice(HINDI_MESSAGES)
-                    await self.send_message(msg)
+                    self.send_chat(msg)
                 
-                # Quick actions
-                await self.quick_actions()
+                # Move and jump
+                self.move_jump()
                 
-                cycle += 1
+                message_count += 1
+                time.sleep(2)
                 
-                # Short pause
-                await asyncio.sleep(2)
-                
-            except Exception as e:
-                log(f"❌ Activity error: {e}", "ERROR")
-                break
-    
-    async def run_fast(self):
-        """Run bot with fast join"""
-        log("=" * 50)
-        log("🎮 MINECRAFT BEDROCK BOT - FAST JOIN MODE 🎮")
-        log("=" * 50)
-        log(f"Server: {self.host}:{self.port}")
-        log(f"Bot Name: {self.bot_name}")
-        log("=" * 50)
-        
-        # Connect quickly
-        if await self.connect_fast():
-            log("✨ Bot is active and ready!")
-            log("Sending Hindi Minecraft messages...")
-            log("=" * 50)
-            await self.bot_activity_fast()
-        else:
-            log("⚠️ Failed to connect. Retrying in 5 seconds...")
-            await asyncio.sleep(5)
-            await self.run_fast()
+        except KeyboardInterrupt:
+            log_message("Bot stopped by user", "INFO")
+        except Exception as e:
+            log_message(f"Error in main loop: {str(e)}", "ERROR")
+        finally:
+            if self.socket:
+                self.socket.close()
 
-async def main():
-    """Main function"""
-    bot = FastMinecraftBot(SERVER_HOST, SERVER_PORT, BOT_NAME)
-    
-    try:
-        await bot.run_fast()
-    except KeyboardInterrupt:
-        log("\n🛑 Bot stopped by user")
-        if bot.writer:
-            try:
-                bot.writer.close()
-                await bot.writer.wait_closed()
-            except:
-                pass
-    except Exception as e:
-        log(f"❌ Fatal error: {e}", "ERROR")
+def main():
+    bot = BedrockBot(SERVER_HOST, SERVER_PORT, BOT_NAME)
+    bot.run()
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
-        log("\n🛑 Bot terminated")
+        log_message("Bot terminated", "INFO")
         sys.exit(0)
