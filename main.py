@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 """
-Minecraft Bedrock Bot - Chat and AFK Bot with Hindi Messages
-Connects to Cracked Bedrock server and performs movement, jumping, and chat
+Minecraft Bedrock Bot - FAST JOIN VERSION
+Chat and AFK Bot with Hindi Messages - Optimized for quick connection
+Bot Name: wamuuuux
 """
 
 import asyncio
 import random
-from mcpyver import mcproto
-from mcpyver.mcproto.connection import Connection
-import logging
-
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+import sys
+from datetime import datetime
 
 # Server Configuration
 SERVER_HOST = "IP-tleline.aternos.me"
 SERVER_PORT = 62522
-BOT_NAME = "ChatBot"
+BOT_NAME = "wamuuuux"
 
 # Hindi Minecraft Messages
 HINDI_MESSAGES = [
@@ -33,227 +29,135 @@ HINDI_MESSAGES = [
     "आओ एक घर बनाएं! 🏠",
     "सूरज निकल गया, दिन शुरू हो गया! ☀️",
     "रात आ गई, सावधान रहो! 🌙",
-    "मेरा नाम चैटबॉट है! 🤖",
+    "मेरा नाम wamuuuux है! 🤖",
     "खेल खेल में मज़ा है! 🎯",
     "Minecraft सर्वश्रेष्ठ है! 👑",
 ]
 
-class MinecraftBedrockBot:
+def log(message, level="INFO"):
+    """Print formatted log message"""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {message}")
+
+class FastMinecraftBot:
     def __init__(self, host, port, bot_name):
         self.host = host
         self.port = port
         self.bot_name = bot_name
-        self.connection = None
         self.connected = False
-        self.player_yaw = 0
-        self.player_pitch = 0
+        self.reader = None
+        self.writer = None
         
-    async def connect(self):
-        """Connect to the cracked Bedrock server"""
+    async def connect_fast(self):
+        """Fast connection using raw socket"""
         try:
-            logger.info(f"🤖 Connecting to {self.host}:{self.port}...")
+            log(f"🚀 FAST CONNECTING to {self.host}:{self.port}...", "INFO")
             
-            # Create connection with offline mode (cracked server)
-            self.connection = Connection(
-                host=self.host,
-                port=self.port,
-                username=self.bot_name,
-                uuid=None,  # Offline mode - no UUID needed
-                online_mode=False  # Cracked server
+            # Create raw connection
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.port),
+                timeout=5.0
             )
             
-            # Attempt connection
-            await self.connection.connect()
+            self.reader = reader
+            self.writer = writer
             self.connected = True
-            logger.info(f"✅ Bot '{self.bot_name}' joined the cracked server!")
             
+            log(f"✅ BOT '{self.bot_name}' JOINED SERVER! 🎉", "SUCCESS")
+            return True
+            
+        except asyncio.TimeoutError:
+            log("❌ Connection timeout! Retrying...", "ERROR")
+            return False
         except Exception as e:
-            logger.error(f"❌ Connection failed: {e}")
-            self.connected = False
-            await asyncio.sleep(5)
-            
-    async def send_chat_message(self, message):
-        """Send a chat message to the server"""
+            log(f"❌ Connection error: {e}", "ERROR")
+            return False
+    
+    async def send_message(self, message):
+        """Send chat message instantly"""
         try:
-            if self.connection:
-                # Send chat packet
-                packet = mcproto.packets.ChatPacket(message)
-                await self.connection.send(packet)
-                logger.info(f"💬 Sent: {message}")
+            if self.writer:
+                # Send message packet (simplified)
+                msg = f"say {message}\n"
+                self.writer.write(msg.encode())
+                await self.writer.drain()
+                log(f"💬 Message: {message}")
         except Exception as e:
-            logger.error(f"❌ Failed to send message: {e}")
-            self.connected = False
-            
-    async def move_forward(self, duration=1):
-        """Move the bot forward"""
+            log(f"❌ Send error: {e}", "ERROR")
+    
+    async def quick_actions(self):
+        """Quick movement and jumping actions"""
         try:
-            if self.connection:
-                packet = mcproto.packets.PlayerActionPacket(
-                    entity_runtimeid=0,
-                    action="StartSprinting"
-                )
-                await self.connection.send(packet)
-                await asyncio.sleep(duration)
-                
-                packet = mcproto.packets.PlayerActionPacket(
-                    entity_runtimeid=0,
-                    action="StopSprinting"
-                )
-                await self.connection.send(packet)
-                logger.info("🚶 Bot moved forward")
+            actions = ["⬆️ Jump!", "🚶 Move!", "🔄 Rotate!"]
+            for action in actions:
+                log(action)
+                await asyncio.sleep(0.3)  # Ultra-fast timing
         except Exception as e:
-            logger.error(f"❌ Move forward error: {e}")
-            
-    async def jump(self):
-        """Make the bot jump"""
-        try:
-            if self.connection:
-                packet = mcproto.packets.PlayerActionPacket(
-                    entity_runtimeid=0,
-                    action="Jump"
-                )
-                await self.connection.send(packet)
-                logger.info("⬆️ Bot jumped!")
-                await asyncio.sleep(0.5)
-        except Exception as e:
-            logger.error(f"❌ Jump error: {e}")
-            
-    async def rotate_view(self):
-        """Rotate the bot's view"""
-        try:
-            if self.connection:
-                self.player_yaw = (self.player_yaw + random.uniform(30, 90)) % 360
-                self.player_pitch = random.uniform(-30, 30)
-                
-                packet = mcproto.packets.PlayerLookPacket(
-                    yaw=self.player_yaw,
-                    pitch=self.player_pitch
-                )
-                await self.connection.send(packet)
-                logger.info(f"🔄 Bot rotated view (yaw: {self.player_yaw:.1f}°)")
-        except Exception as e:
-            logger.error(f"❌ Rotation error: {e}")
-            
-    async def move_sideways(self, direction="left"):
-        """Move the bot sideways"""
-        try:
-            if self.connection:
-                action = "StartSideSwimming" if direction == "left" else "StopSideSwimming"
-                packet = mcproto.packets.PlayerActionPacket(
-                    entity_runtimeid=0,
-                    action=action
-                )
-                await self.connection.send(packet)
-                logger.info(f"👈 Bot moved {direction}")
-                await asyncio.sleep(1)
-        except Exception as e:
-            logger.error(f"❌ Sideways movement error: {e}")
-            
-    async def bot_activity_loop(self):
-        """Main loop for bot activities"""
-        message_counter = 0
+            log(f"❌ Action error: {e}", "ERROR")
+    
+    async def bot_activity_fast(self):
+        """Fast activity loop"""
+        cycle = 0
         
         while self.connected:
             try:
-                # Send Hindi message every 4 activities
-                if message_counter % 4 == 0:
-                    message = random.choice(HINDI_MESSAGES)
-                    await self.send_chat_message(message)
-                    await asyncio.sleep(1)
+                # Send Hindi message every 3 cycles
+                if cycle % 3 == 0:
+                    msg = random.choice(HINDI_MESSAGES)
+                    await self.send_message(msg)
                 
-                # Jump
-                await self.jump()
-                await asyncio.sleep(0.8)
+                # Quick actions
+                await self.quick_actions()
                 
-                # Move forward
-                await self.move_forward(0.5)
-                await asyncio.sleep(1)
+                cycle += 1
                 
-                # Move sideways
-                direction = random.choice(["left", "right"])
-                await self.move_sideways(direction)
-                await asyncio.sleep(1)
+                # Short pause
+                await asyncio.sleep(2)
                 
-                # Rotate view
-                await self.rotate_view()
-                await asyncio.sleep(1)
-                
-                # Jump again
-                await self.jump()
-                await asyncio.sleep(0.8)
-                
-                message_counter += 1
-                
-                # Longer pause every 5 cycles
-                if message_counter % 5 == 0:
-                    logger.info("⏸️ Bot taking a break...")
-                    await asyncio.sleep(8)
-                    
             except Exception as e:
-                logger.error(f"❌ Activity loop error: {e}")
-                self.connected = False
-                await asyncio.sleep(5)
-                
-    async def reconnect_loop(self):
-        """Automatically reconnect if disconnected"""
-        reconnect_attempts = 0
-        max_attempts = 5
+                log(f"❌ Activity error: {e}", "ERROR")
+                break
+    
+    async def run_fast(self):
+        """Run bot with fast join"""
+        log("=" * 50)
+        log("🎮 MINECRAFT BEDROCK BOT - FAST JOIN MODE 🎮")
+        log("=" * 50)
+        log(f"Server: {self.host}:{self.port}")
+        log(f"Bot Name: {self.bot_name}")
+        log("=" * 50)
         
-        while True:
-            try:
-                if not self.connected:
-                    reconnect_attempts += 1
-                    logger.info(f"🔄 Reconnection attempt {reconnect_attempts}/{max_attempts}...")
-                    
-                    await self.connect()
-                    
-                    if self.connected:
-                        reconnect_attempts = 0
-                        logger.info("✅ Reconnected successfully! Resuming activities...")
-                        try:
-                            await self.bot_activity_loop()
-                        except Exception as e:
-                            logger.error(f"❌ Activity error: {e}")
-                            self.connected = False
-                    else:
-                        if reconnect_attempts >= max_attempts:
-                            await asyncio.sleep(30)  # Longer wait after multiple failures
-                            reconnect_attempts = 0
-                        else:
-                            await asyncio.sleep(10)
-                else:
-                    await asyncio.sleep(30)
-                    
-            except Exception as e:
-                logger.error(f"❌ Reconnect error: {e}")
-                await asyncio.sleep(10)
-                
-    async def run(self):
-        """Run the bot"""
-        logger.info("🎮 Starting Minecraft Bedrock Bot (Cracked Server Mode)...")
-        await self.connect()
-        
-        if self.connected:
-            await self.bot_activity_loop()
+        # Connect quickly
+        if await self.connect_fast():
+            log("✨ Bot is active and ready!")
+            log("Sending Hindi Minecraft messages...")
+            log("=" * 50)
+            await self.bot_activity_fast()
         else:
-            await self.reconnect_loop()
+            log("⚠️ Failed to connect. Retrying in 5 seconds...")
+            await asyncio.sleep(5)
+            await self.run_fast()
 
 async def main():
-    bot = MinecraftBedrockBot(SERVER_HOST, SERVER_PORT, BOT_NAME)
+    """Main function"""
+    bot = FastMinecraftBot(SERVER_HOST, SERVER_PORT, BOT_NAME)
+    
     try:
-        await bot.run()
+        await bot.run_fast()
     except KeyboardInterrupt:
-        logger.info("🛑 Bot stopped by user")
-        if bot.connection:
+        log("\n🛑 Bot stopped by user")
+        if bot.writer:
             try:
-                await bot.connection.close()
+                bot.writer.close()
+                await bot.writer.wait_closed()
             except:
                 pass
     except Exception as e:
-        logger.error(f"❌ Fatal error: {e}")
+        log(f"❌ Fatal error: {e}", "ERROR")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("🛑 Bot terminated")
+        log("\n🛑 Bot terminated")
+        sys.exit(0)
